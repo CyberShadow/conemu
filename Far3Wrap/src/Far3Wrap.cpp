@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <TlHelp32.h>
 #include "version.h"
 #include "Memory.h"
-#include "SetHook.h"
+//#include "SetHook.h"
 
 #ifdef _DEBUG
 	//#define USE_MINIDUMP
@@ -1609,7 +1609,7 @@ BOOL WrapPluginInfo::LoadPlugin(BOOL abSilent)
 
 	if (mh_Dll != NULL)
 	{
-		SetHook(ms_File, mh_Dll, TRUE);
+		//SetHook(ms_File, mh_Dll, TRUE);
 	}
 	
 	return (mh_Dll != NULL);
