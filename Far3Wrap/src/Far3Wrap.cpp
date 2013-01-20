@@ -7910,7 +7910,11 @@ HANDLE    WrapPluginInfo::AnalyseW3(const AnalyseInfo *Info)
 		if (m_AnalyzeMode == 3)
 		{
 			MacroSendMacroText mcr = {sizeof(MacroSendMacroText)};
+			#if MVV_3>2850
+			mcr.SequenceText = L"if Area.Menu then Keys('Esc') end";
+			#else
 			mcr.SequenceText = L"$if (Menu) Esc $end";
+			#endif
 			mcr.Flags = KMFLAGS_DISABLEOUTPUT;
 			psi3.MacroControl(MCTLARG(mguid_Plugin), MCTL_SENDSTRING, 0, &mcr);
 		}
