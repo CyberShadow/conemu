@@ -440,6 +440,7 @@ struct WrapPluginInfo
 	static int WINAPI FarNameToKey3(const wchar_t *Name);
 	//static int WINAPI FarInputRecordToKey3(const INPUT_RECORD *rec);
 	#endif
+	wchar_t* SequenceText_2_3(const wchar_t* pszText);
 	static int FarColorIndex_2_3(int ColorIndex2);
 	static int FarColorIndex_3_2(int ColorIndex3);
 	static FARDIALOGITEMTYPES DialogItemTypes_2_3(int ItemType2);
@@ -2354,6 +2355,184 @@ int WrapPluginInfo::FarNameToKey3(const wchar_t *Name)
 	return Key2;
 }
 #endif // #if MVV_3>=2103
+
+/// Returns NULL if string is unchanged.
+/// Otherwise, result must be freed after use.
+wchar_t* WrapPluginInfo::SequenceText_2_3(const wchar_t* pszText)
+{
+	if (!pszText || !*pszText)
+		return NULL;
+
+	#if MVV_3>2850
+
+	// Wrap key sequence into Keys('...') call.
+	// TODO: Translation of more complicated sequences, incl. e.g. the CallPlugin conversion below.
+	wchar_t *pszText3 = (wchar_t*)calloc(6 + lstrlen(pszText) + 2 + 1, sizeof(wchar_t)); // "Keys('" + pszText + "')" + '\0'
+	lstrcpy(pszText3, L"Keys('");
+	lstrcat(pszText3, pszText);
+	lstrcat(pszText3, L"')");
+	return pszText3;
+
+	#else
+
+	// Плагин может звать сам себя через CallPlugin, 
+	// в этом случае нужно заменить старый PluginID (DWORD) на GUID
+
+	wchar_t *pszUpper = NULL, *pszChanged = NULL;
+	pszUpper = lstrdup(pszText);
+	size_t nOrigLen = lstrlen(pszText);
+	size_t nAddPos = 0;
+	CharUpperBuff(pszUpper, lstrlen(pszUpper));
+	wchar_t* pszFrom = pszUpper;
+	wchar_t* pszCall;
+	WCHAR /*szIdDec[32], szIdHex1[32], szIdHex2[32], szId[32],*/ szGuid[64];
+	//wsprintf(szIdDec, L"%u", m_Info.Reserved);
+	//wsprintf(szIdHex1, L"0X%X", m_Info.Reserved);
+	//wsprintf(szIdHex2, L"0X%08X", m_Info.Reserved);
+	//FormatGuid(&mguid_Plugin, szGuid, TRUE);
+	int nCchAdd = 0, nCchGuidsAdd = 0;
+	while ((pszCall = wcsstr(pszFrom, L"CALLPLUGIN")) != NULL)
+	{
+		pszCall = pszCall + 10; // lstrlen(L"CALLPLUGIN")
+		pszFrom = pszCall; // сразу, чтобы не забыть и не зациклиться
+		while (*pszCall == L' ' || *pszCall == L'\t') pszCall++;
+		if (*pszCall != L'(') continue;
+		pszCall++;
+		while (*pszCall == L' ' || *pszCall == L'\t') pszCall++;
+		if (*pszCall < L'0' || *pszCall > L'9') continue; // допускаются только числа
+
+		szGuid[0] = 0;
+		DWORD nID = 0;
+		wchar_t* pszEnd = NULL;
+		if (pszCall[1] == L'X')
+			nID = wcstoul(pszCall+2, &pszEnd, 16);
+		else
+			nID = wcstoul(pszCall, &pszEnd, 10);
+		if (!nID || !pszEnd || (pszEnd <= pszCall))
+			continue; // ошибка в ID?
+
+		if (nID == m_Info.Reserved)
+			FormatGuid(&mguid_Plugin, szGuid, TRUE);
+		else
+		{
+			// Ищем среди загруженных враппером
+			std::map<DWORD,WrapPluginInfo*>::iterator iter;
+			for (iter = (*gpMapSysID).begin(); iter != (*gpMapSysID).end(); iter++)
+			{
+				if (iter->first == nID)
+				{
+					FormatGuid(&iter->second->mguid_Plugin, szGuid, TRUE);
+					break;
+				}
+			}
+
+			// Ищем по "известным"
+			if (szGuid[0] == 0)
+			{
+				LPCWSTR pszGuid = NULL;
+				switch (nID)
+				{
+				case 0x43454D55: // ConEmu
+					pszGuid = L"4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"; break;
+				case 0x43455568: // ConEmuTh
+					pszGuid = L"bd454d48-448e-46cc-909d-b6cf789c2d65"; break;
+				// Wrapper!
+				case 0x424C434D: // MacroLib
+					pszGuid = L"46FC0BF1-CC99-4652-B41D-C7B8705D52AF"; break;
+				case 0x436C4678: // ClipFixer
+					pszGuid = L"AF0DD773-7193-4F50-9904-AB24673EB42C"; break;
+				//const SameFolder = 0x44464D53
+				case 0x444E4645: // EditFind
+					pszGuid = L"8EF28982-957E-4BCE-AD73-7E67DB443969"; break;
+				case 0x44654272: // DeepBrowser
+					pszGuid = L"D1778FAF-B6B1-4604-9D9C-CBCF3B15F7A8"; break;
+				case 0x466C5470: // FileTypes
+					pszGuid = L"32C72FF2-8762-4485-9BAE-2020B9143AA0"; break;
+				case 0x4D426C6B: // MBlockEditor
+					pszGuid = L"D82D6847-0C7B-4BF4-9A31-B0B929707854"; break;
+				case 0x4D4D5657: // MMView
+					pszGuid = L"44E0DA00-F361-4ACC-BF8F-DDC7D2E0494F"; break;
+				case 0x52674564: // RegEditor
+					pszGuid = L"F6A1E51C-1C11-4BD5-ADD2-8677348BC106"; break;
+				//const FarHints = 0x544E4948
+				case 0x5774654E: // Network
+					pszGuid = L"9E724C40-D0B6-4DC3-9F30-CC7AF5292C5B"; break;
+				case 0xA91B3F07: // PanelTabs
+					pszGuid = L"66D5D731-EE8E-4113-87F3-56883CC321DA"; break;
+				}
+				if (pszGuid)
+				{
+					szGuid[0] = L'"'; lstrcpy(szGuid+1, pszGuid); lstrcat(szGuid, L"\"");
+				}
+			}
+		}
+
+		if (szGuid[0] == 0)
+			continue; // неизвестный ID, сделать ничего не сможем
+
+		size_t nNewIdLen = lstrlen(szGuid);
+		_ASSERTE(nNewIdLen==38);
+
+		if (nCchAdd < 38 || !pszChanged)
+		{
+			wchar_t* pszNew = NULL;
+			int nLen = 0;
+			nCchAdd = 38*10; // 10 гуидов с кавычками
+			if (pszChanged == NULL)
+			{
+				nLen = lstrlen(pszText);
+				pszNew = (wchar_t*)calloc(nLen+nCchAdd+1, sizeof(wchar_t));
+				if (!pszNew) { _ASSERTE(pszNew!=NULL); break; }
+				lstrcpy(pszNew, pszText);
+			}
+			else
+			{
+				nLen = lstrlen(pszChanged);
+				pszNew = (wchar_t*)calloc(nLen+nCchAdd+1, sizeof(wchar_t));
+				if (!pszNew) { _ASSERTE(pszNew!=NULL); break; }
+				lstrcpy(pszNew, pszChanged);
+				free(pszChanged);
+			}
+			pszChanged = pszNew;
+		}
+
+		size_t nPos = (pszCall - pszUpper);
+		size_t nOrigIdLen = pszEnd - pszCall;
+		if (nOrigLen < (nOrigIdLen+nPos))
+		{
+			_ASSERTE(nOrigLen > (nOrigIdLen+nPos));
+			break;
+		}
+		// Освободить место для GUID (размер такой, т.к. память выделена calloc)
+		memmove(pszChanged+nNewIdLen+nPos+nAddPos, pszChanged+nPos+nAddPos+nOrigIdLen, (nOrigLen-nOrigIdLen-nPos)*sizeof(wchar_t));
+		// положить новый ИД
+		memmove(pszChanged+nPos+nAddPos, szGuid, nNewIdLen*sizeof(wchar_t));
+
+		nCchAdd -= nNewIdLen;
+		pszFrom = pszCall + nOrigIdLen;
+		nAddPos += nNewIdLen - nOrigIdLen;
+
+		//// Теперь - скопировать ID в szId
+		//for (int i = 0; i < 12 
+		//		&& ( (pszCall[i] >= L'0' && pszCall[i] <= L'9')
+		//		  || (pszCall[i] >= L'A' && pszCall[i] <= L'F') // был CharUpperBuff
+		//		  || (pszCall[i] >= L'X') // HEX
+		//		    ) ; i++)
+		//{
+		//	szId[i] = pszCall[i]; szId[i+1] = 0;
+		//}
+		////
+		//if (lstrcmp(szId, szIdDec) && lstrcmp(szId, szIdHex1) && lstrcmp(szId, szIdHex2))
+		//	continue; 
+		//if (szGuid[0] == 0)
+		//	continue; // неизвестный ID, сделать ничего не сможем
+	}
+	if (pszUpper)
+		free(pszUpper);
+	return pszChanged;
+
+	#endif // MVV_3>2850
+}
 
 int WrapPluginInfo::FarColorIndex_2_3(int ColorIndex2)
 {
@@ -5962,7 +6141,7 @@ INT_PTR WrapPluginInfo::FarApiAdvControl(INT_PTR ModuleNumber, int Command, void
 					{
 						MacroSendMacroText mcr = {sizeof(MacroSendMacroText)};
 						mcr.SequenceText = p2->Param.PlainText.SequenceText;
-						wchar_t *pszUpper = NULL, *pszChanged = NULL, *pszDeMultiSz = NULL;
+						wchar_t *pszDeMultiSz = NULL;
 						if (p2->Param.PlainText.Flags & Far2::KSFLAGS_REG_MULTI_SZ)
 						{
 							if ((pszDeMultiSz = MacroFromMultiSZ(p2->Param.PlainText.SequenceText)) != NULL)
@@ -5973,172 +6152,19 @@ INT_PTR WrapPluginInfo::FarApiAdvControl(INT_PTR ModuleNumber, int Command, void
 						{
 							FarKey_2_3(p2->Param.PlainText.AKey, &mcr.AKey);
 						}
-						// Плагин может звать сам себя через CallPlugin, 
-						// в этом случае нужно заменить старый PluginID (DWORD) на GUID
-						if (mcr.SequenceText && *mcr.SequenceText /*&& m_Info.Reserved*/)
-						{
-							pszUpper = lstrdup(mcr.SequenceText);
-							size_t nOrigLen = lstrlen(mcr.SequenceText);
-							size_t nAddPos = 0;
-							CharUpperBuff(pszUpper, lstrlen(pszUpper));
-							wchar_t* pszFrom = pszUpper;
-							wchar_t* pszCall;
-							WCHAR /*szIdDec[32], szIdHex1[32], szIdHex2[32], szId[32],*/ szGuid[64];
-							//wsprintf(szIdDec, L"%u", m_Info.Reserved);
-							//wsprintf(szIdHex1, L"0X%X", m_Info.Reserved);
-							//wsprintf(szIdHex2, L"0X%08X", m_Info.Reserved);
-							//FormatGuid(&mguid_Plugin, szGuid, TRUE);
-							int nCchAdd = 0, nCchGuidsAdd = 0;
-							while ((pszCall = wcsstr(pszFrom, L"CALLPLUGIN")) != NULL)
-							{
-								pszCall = pszCall + 10; // lstrlen(L"CALLPLUGIN")
-								pszFrom = pszCall; // сразу, чтобы не забыть и не зациклиться
-								while (*pszCall == L' ' || *pszCall == L'\t') pszCall++;
-								if (*pszCall != L'(') continue;
-								pszCall++;
-								while (*pszCall == L' ' || *pszCall == L'\t') pszCall++;
-								if (*pszCall < L'0' || *pszCall > L'9') continue; // допускаются только числа
-
-								szGuid[0] = 0;
-								DWORD nID = 0;
-								wchar_t* pszEnd = NULL;
-								if (pszCall[1] == L'X')
-									nID = wcstoul(pszCall+2, &pszEnd, 16);
-								else
-									nID = wcstoul(pszCall, &pszEnd, 10);
-								if (!nID || !pszEnd || (pszEnd <= pszCall))
-									continue; // ошибка в ID?
-
-								if (nID == m_Info.Reserved)
-									FormatGuid(&mguid_Plugin, szGuid, TRUE);
-								else
-								{
-									// Ищем среди загруженных враппером
-									std::map<DWORD,WrapPluginInfo*>::iterator iter;
-									for (iter = (*gpMapSysID).begin(); iter != (*gpMapSysID).end(); iter++)
-									{
-										if (iter->first == nID)
-										{
-											FormatGuid(&iter->second->mguid_Plugin, szGuid, TRUE);
-											break;
-										}
-									}
-
-									// Ищем по "известным"
-									if (szGuid[0] == 0)
-									{
-										LPCWSTR pszGuid = NULL;
-										switch (nID)
-										{
-										case 0x43454D55: // ConEmu
-											pszGuid = L"4b675d80-1d4a-4ea9-8436-fdc23f2fc14b"; break;
-										case 0x43455568: // ConEmuTh
-											pszGuid = L"bd454d48-448e-46cc-909d-b6cf789c2d65"; break;
-										// Wrapper!
-										case 0x424C434D: // MacroLib
-											pszGuid = L"46FC0BF1-CC99-4652-B41D-C7B8705D52AF"; break;
-										case 0x436C4678: // ClipFixer
-											pszGuid = L"AF0DD773-7193-4F50-9904-AB24673EB42C"; break;
-										//const SameFolder = 0x44464D53
-										case 0x444E4645: // EditFind
-											pszGuid = L"8EF28982-957E-4BCE-AD73-7E67DB443969"; break;
-										case 0x44654272: // DeepBrowser
-											pszGuid = L"D1778FAF-B6B1-4604-9D9C-CBCF3B15F7A8"; break;
-										case 0x466C5470: // FileTypes
-											pszGuid = L"32C72FF2-8762-4485-9BAE-2020B9143AA0"; break;
-										case 0x4D426C6B: // MBlockEditor
-											pszGuid = L"D82D6847-0C7B-4BF4-9A31-B0B929707854"; break;
-										case 0x4D4D5657: // MMView
-											pszGuid = L"44E0DA00-F361-4ACC-BF8F-DDC7D2E0494F"; break;
-										case 0x52674564: // RegEditor
-											pszGuid = L"F6A1E51C-1C11-4BD5-ADD2-8677348BC106"; break;
-										//const FarHints = 0x544E4948
-										case 0x5774654E: // Network
-											pszGuid = L"9E724C40-D0B6-4DC3-9F30-CC7AF5292C5B"; break;
-										case 0xA91B3F07: // PanelTabs
-											pszGuid = L"66D5D731-EE8E-4113-87F3-56883CC321DA"; break;
-										}
-										if (pszGuid)
-										{
-											szGuid[0] = L'"'; lstrcpy(szGuid+1, pszGuid); lstrcat(szGuid, L"\"");
-										}
-									}
-								}
-
-								if (szGuid[0] == 0)
-									continue; // неизвестный ID, сделать ничего не сможем
-
-								size_t nNewIdLen = lstrlen(szGuid);
-								_ASSERTE(nNewIdLen==38);
-
-								if (nCchAdd < 38 || !pszChanged)
-								{
-									wchar_t* pszNew = NULL;
-									int nLen = 0;
-									nCchAdd = 38*10; // 10 гуидов с кавычками
-									if (pszChanged == NULL)
-									{
-										nLen = lstrlen(mcr.SequenceText);
-										pszNew = (wchar_t*)calloc(nLen+nCchAdd+1, sizeof(wchar_t));
-										if (!pszNew) { _ASSERTE(pszNew!=NULL); break; }
-										lstrcpy(pszNew, mcr.SequenceText);
-									}
-									else
-									{
-										nLen = lstrlen(pszChanged);
-										pszNew = (wchar_t*)calloc(nLen+nCchAdd+1, sizeof(wchar_t));
-										if (!pszNew) { _ASSERTE(pszNew!=NULL); break; }
-										lstrcpy(pszNew, pszChanged);
-										free(pszChanged);
-									}
-									pszChanged = pszNew;
-								}
-
-								size_t nPos = (pszCall - pszUpper);
-								size_t nOrigIdLen = pszEnd - pszCall;
-								if (nOrigLen < (nOrigIdLen+nPos))
-								{
-									_ASSERTE(nOrigLen > (nOrigIdLen+nPos));
-									break;
-								}
-								// Освободить место для GUID (размер такой, т.к. память выделена calloc)
-								memmove(pszChanged+nNewIdLen+nPos+nAddPos, pszChanged+nPos+nAddPos+nOrigIdLen, (nOrigLen-nOrigIdLen-nPos)*sizeof(wchar_t));
-								// положить новый ИД
-								memmove(pszChanged+nPos+nAddPos, szGuid, nNewIdLen*sizeof(wchar_t));
-
-								nCchAdd -= nNewIdLen;
-								pszFrom = pszCall + nOrigIdLen;
-								nAddPos += nNewIdLen - nOrigIdLen;
-
-								//// Теперь - скопировать ID в szId
-								//for (int i = 0; i < 12 
-								//		&& ( (pszCall[i] >= L'0' && pszCall[i] <= L'9')
-								//		  || (pszCall[i] >= L'A' && pszCall[i] <= L'F') // был CharUpperBuff
-								//		  || (pszCall[i] >= L'X') // HEX
-								//		    ) ; i++)
-								//{
-								//	szId[i] = pszCall[i]; szId[i+1] = 0;
-								//}
-								////
-								//if (lstrcmp(szId, szIdDec) && lstrcmp(szId, szIdHex1) && lstrcmp(szId, szIdHex2))
-								//	continue; 
-								//if (szGuid[0] == 0)
-								//	continue; // неизвестный ID, сделать ничего не сможем
-							}
-
-							if (pszChanged != NULL)
-								mcr.SequenceText = pszChanged;
-						}
+						// Far 2 -> 3 syntax conversion
+						const wchar_t* pszSequence2 = mcr.SequenceText;
+						wchar_t* pszSequence3 = SequenceText_2_3(pszSequence2);
+						if (pszSequence3)
+							mcr.SequenceText = pszSequence3;
 						mcr.Flags = 0
 							| ((p2->Param.PlainText.Flags & Far2::KSFLAGS_DISABLEOUTPUT) ? KMFLAGS_DISABLEOUTPUT : 0)
 							| ((p2->Param.PlainText.Flags & Far2::KSFLAGS_NOSENDKEYSTOPLUGINS) ? KMFLAGS_NOSENDKEYSTOPLUGINS : 0)
 							//| ((p2->Param.PlainText.Flags & Far2::KSFLAGS_REG_MULTI_SZ) ? KMFLAGS_REG_MULTI_SZ : 0)
 							| ((p2->Param.PlainText.Flags & Far2::KSFLAGS_SILENTCHECK) ? KMFLAGS_SILENTCHECK : 0);
 						iRc = psi3.MacroControl(MCTLARG(guid), MCTL_SENDSTRING, 0, &mcr);
-						if (pszUpper)
-							free(pszUpper);
-						if (pszChanged)
-							free(pszChanged);
+						if (pszSequence3)
+							free(pszSequence3);
 						if (pszDeMultiSz)
 							free(pszDeMultiSz);
 					}
