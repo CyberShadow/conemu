@@ -5393,7 +5393,11 @@ int WrapPluginInfo::FarApiControl(HANDLE hPlugin, int Command, int Param1, LONG_
 	case Far2::FCTL_UPDATEPANEL:
 		iRc = psi3.PanelControl(hPlugin, FCTL_UPDATEPANEL, Param1, (void*)Param2); break;
 	case Far2::FCTL_REDRAWPANEL:
-		iRc = psi3.PanelControl(hPlugin, FCTL_REDRAWPANEL, Param1, (void*)Param2); break;
+		{
+			ADD_STRUCTSIZE_HERE(PanelRedrawInfo, Param2);
+			iRc = psi3.PanelControl(hPlugin, FCTL_REDRAWPANEL, Param1, (void*)Param2);
+		}
+		break;
 	case Far2::FCTL_GETCMDLINE:
 		iRc = psi3.PanelControl(hPlugin, FCTL_GETCMDLINE, Param1, (void*)Param2); break;
 	case Far2::FCTL_SETCMDLINE:
