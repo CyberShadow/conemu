@@ -1728,12 +1728,12 @@ InfoPanelLine* WrapPluginInfo::InfoLines_2_3(const Far2::InfoPanelLine *InfoLine
 	m_InfoLinesNumber = 0;
 	if (InfoLines && InfoLinesNumber > 0)
 	{	
-		m_InfoLines = (InfoPanelLine*)calloc(InfoLinesNumber, sizeof(*InfoLines));
+		m_InfoLines = (InfoPanelLine*)calloc(InfoLinesNumber, sizeof(*m_InfoLines));
 		for (int i = 0; i < InfoLinesNumber; i++)
 		{
 			m_InfoLines[i].Text = InfoLines[i].Text;
 			m_InfoLines[i].Data = InfoLines[i].Data;
-			#if MVV_3<=2798
+			#if MVV_3<=2824
 			m_InfoLines[i].Separator = InfoLines[i].Separator;
 			#else
 			if (InfoLines[i].Separator)
